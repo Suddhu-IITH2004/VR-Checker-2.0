@@ -22,23 +22,27 @@
 </head>
 
 <body>
+
+
+    <!-- language: lang-html -->
+
     <canvas id="c"></canvas>
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://threejs.org/build/three.module.js",
-                "three/addons/": "https://threejs.org/examples/jsm/"
-            }
-        }
-    </script>
+    <script type="importmap">{
+          "imports": {
+              "three": "https://threejs.org/build/three.module.js",
+              "three/addons/": "https://threejs.org/examples/jsm/"
+          }
+      }</script><!-- Remove this when import maps will be widely supported -->
     <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
     <script type="module">
         // Three.js - WebXR - Point to Select w/Move
         // from https://threejs.org/manual/examples/webxr-point-to-select-w-move.html
 
+
         import * as THREE from 'three';
         import { VRButton } from 'three/addons/webxr/VRButton.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
 
         function main() {
             const canvas = document.querySelector('#c');
@@ -47,7 +51,7 @@
             document.body.appendChild(VRButton.createButton(renderer));
 
             const fov = 75;
-            const aspect = 2; // the canvas default
+            const aspect = 2;  // the canvas default
             const near = 0.1;
             const far = 50;
             const camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
@@ -87,6 +91,9 @@
                 });
             }
 
+
+
+
             function loadModelInstance(url, x) {
                 return loadModel(url).then((gltf) => {
                     const model = gltf.scene;
@@ -108,11 +115,24 @@
                 });
             }
 
-            let model;
 
-            loadModelInstance('model.gltf', 0).then((loadedModel) => {
-                model = loadedModel;
+            const meshToMeshMap = new Map();
+            [
+                { x: 0 },
+
+            ].forEach((info) => {
+                Promise.all([
+                    loadModelInstance('model.gltf', 0),
+                ]).then((models) => {
+                    models.forEach((model) => {
+                        const box = model.clone();
+
+                    });
+                });
+
             });
+            let selectedModel = null;
+
 
             class ControllerPickHelper extends THREE.EventDispatcher {
                 constructor(scene) {
@@ -155,7 +175,6 @@
                         this.controllers.push({ controller, line });
                     }
                 }
-
                 reset() {
                     // restore the colors
                     this.objectToColorMap.forEach((color, object) => {
@@ -164,7 +183,6 @@
                     this.objectToColorMap.clear();
                     this.controllerToObjectMap.clear();
                 }
-
                 update(pickablesParent, time) {
                     this.reset();
                     for (const { controller, line } of this.controllers) {
@@ -202,11 +220,13 @@
                 const { controller, selectedObject } = event;
                 const existingSelection = controllerToSelection.get(controller);
                 if (!existingSelection) {
+                    const model = selectedObject.parent || selectedObject;
                     controllerToSelection.set(controller, {
-                        object: selectedObject,
-                        parent: selectedObject.parent,
-                        offset: new THREE.Vector3().subVectors(selectedObject.position, controller.position),
+                        object: model,
+                        parent: model.parent,
                     });
+                    controller.attach(model);
+                    selectedModel = model;
                 }
             });
 
@@ -215,9 +235,13 @@
                 const selection = controllerToSelection.get(controller);
                 if (selection) {
                     controllerToSelection.delete(controller);
-                    selection.parent.attach(selection.object);
+                    const model = selection.object;
+                    const parent = selection.parent;
+                    parent.attach(model);
+                    selectedModel = null;
                 }
             });
+
 
             function resizeRendererToDisplaySize(renderer) {
                 const canvas = renderer.domElement;
@@ -233,6 +257,7 @@
                 return needResize;
             }
 
+
             function render(time) {
                 time *= 0.001;
 
@@ -242,13 +267,16 @@
                     camera.updateProjectionMatrix();
                 }
 
-                if (model && controllerToSelection.size > 0) {
-                    const positions = Array.from(controllerToSelection.values()).map((selection) => {
-                        const offset = selection.offset.clone().applyQuaternion(controller.quaternion);
-                        return offset.add(controller.position);
-                    });
-                    const averagePosition = positions.reduce((acc, position) => acc.add(position), new THREE.Vector3()).divideScalar(positions.length);
-                    model.position.copy(averagePosition);
+                if (selectedModel) {
+                    const { controller } = pickHelper.controllers[0];
+                    const controllerMatrix = new THREE.Matrix4().getInverse(controller.matrixWorld);
+                    const controllerPosition = new THREE.Vector3();
+                    const controllerQuaternion = new THREE.Quaternion();
+                    const controllerScale = new THREE.Vector3();
+                    controllerMatrix.decompose(controllerPosition, controllerQuaternion, controllerScale);
+                    selectedModel.position.copy(controllerPosition);
+                    selectedModel.quaternion.copy(controllerQuaternion);
+                    selectedModel.scale.copy(controllerScale);
                 }
 
                 pickHelper.update(pickRoot, time);
@@ -256,11 +284,16 @@
                 renderer.render(scene, camera);
             }
 
+
+
             renderer.setAnimationLoop(render);
         }
 
         main();
+
     </script>
+
+    <!-- end snippet -->
 </body>
 
 </html>
